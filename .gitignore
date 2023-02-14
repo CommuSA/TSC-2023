@@ -1,0 +1,7 @@
+/transfer-private-data/chaincode/asset_queries_test.go
+/transfer-private-data/chaincode/asset_transfer_test.go
+.DS_Store
+/transfer-private-data/vendor/
+.vscode
+bin/
+/transfer-private-data/.DS_Store
