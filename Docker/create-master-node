@@ -1,0 +1,21 @@
+#!/bin/bash 
+# This script help you create an ipfs container quickly.
+
+if [ $# != 4 ] ; then
+	echo "Four args needed: name, port1, port2, port3"
+	exit 1;
+fi
+
+ipfs_staging=$(pwd)/$1/ipfs_staging
+ipfs_data=$(pwd)/$1/ipfs_data
+
+mkdir -p $ipfs_staging
+mkdir -p $ipfs_data
+
+docker run -d --name $1 \
+		   -v $ipfs_staging:/export \
+		   -v $ipfs_data:/data/ipfs \
+		   -p $2:4001 -p 127.0.0.1:$3:8080 \
+		   -p 127.0.0.1:$4:5001 jackieking/abe_master:v1.0
+
+
