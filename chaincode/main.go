@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/fentec-project/gofe/abe"
-
 	shell "github.com/ipfs/go-ipfs-api"
 
 	"github.com/gtank/cryptopasta"
@@ -35,21 +34,13 @@ type AbeUserPara struct {
 	keys    *abe.FAMEAttribKeys `json:"keys"`
 }
 
-type AbePeerPara struct {
-	ID      string          `json:"ID"`
-	ABEFAME *abe.FAME       `json:"ABEFAME"`
-	mpk     *abe.FAMEPubKey `json:"mpk"`
-	msk     *abe.FAMESecKey `json:"msk"`
-	msp     *abe.MSP        `json:"msp"`
-}
-
-type AbePeerParaDB struct {
-	ID      string `json:"ID"`
-	ABEFAME string `json:"ABEFAME"`
-	mpk     string `json:"mpk"`
-	msk     string `json:"msk"`
-	msp     string `json:"msp"`
-}
+// type AbePeerParaDB struct {
+// 	ID      string `json:"ID"`
+// 	ABEFAME string `json:"ABEFAME"`
+// 	mpk     string `json:"mpk"`
+// 	msk     string `json:"msk"`
+// 	msp     string `json:"msp"`
+// }
 
 type Circuit struct {
 	leftOperand  string
@@ -58,8 +49,9 @@ type Circuit struct {
 }
 
 type MessageKey struct {
-	keys string
-	cid  string
+	ID  string `json:"ID"`
+	Key string `json:"key"`
+	Cid string `json:"cid"`
 }
 
 //------------------------------------------------------------ABE SETUP-------------------------------------------------------------------//
@@ -199,8 +191,18 @@ func containsString(strings []string, s string) bool {
 	return false
 }
 
+func (mc *MyChaincode) ParaExists(ctx contractapi.TransactionContextInterface, id string) (bool, error) {
+	ParaJSON, err := ctx.GetStub().GetState(id)
+	if err != nil {
+		return false, fmt.Errorf("failed to read from world state: %v", err)
+	}
+
+	return ParaJSON != nil, nil
+}
+
 func (mc *MyChaincode) PrepareAbe(ctx contractapi.TransactionContextInterface, numMagnitude int, AttributesNeeded int) error {
-	var peerAbeParaPut AbePeerPara
+	// txTimestamp, err := ctx.GetStub().GetTxTimestamp()
+	// seed := int64(txTimestamp.Seconds) + int64(txTimestamp.Nanos)
 	rand.Seed(time.Now().Unix())
 	relay := abe.NewFAME()
 	// Generate an ABE key pair
@@ -210,28 +212,31 @@ func (mc *MyChaincode) PrepareAbe(ctx contractapi.TransactionContextInterface, n
 	}
 	policy := policySetup(numMagnitude)
 	msp, _ := abe.BooleanToMSP(policy, false) // The MSP structure defining the policy
-	// mskJSON, _ := json.Marshal(msk)
-	// mpkJSON, _ := json.Marshal(mpk)
-	// mspJSON, _ := json.Marshal(msp)
-	// abeJSON, _ := json.Marshal(relay)
-	// peerAbeParaPut := AbePeerParaDB{
-	// 	ID:      "peerPara",
-	// 	ABEFAME: string(abeJSON),
-	// 	mpk:     string(mpkJSON),
-	// 	msk:     string(mskJSON),
-	// 	msp:     string(mspJSON),
-	// }
-	peerAbeParaPut.ID = "peerPara"
-	peerAbeParaPut.msk = msk
-	peerAbeParaPut.mpk = mpk
-	peerAbeParaPut.msp = msp
-	peerAbeParaPut.ABEFAME = relay
-	peerAbeParaPutJSON, err := json.Marshal(peerAbeParaPut)
+	mskJSON, _ := json.Marshal(msk)
+	mpkJSON, _ := json.Marshal(mpk)
+	mspJSON, _ := json.Marshal(msp)
+	abeJSON, _ := json.Marshal(relay)
+
+	err = ctx.GetStub().PutState("AbeParaMsk", mskJSON)
+	if err != nil {
+		return err
+
+	}
+	err = ctx.GetStub().PutState("AbeParaMpk", mpkJSON)
 	if err != nil {
 		return err
 	}
 
-	return ctx.GetStub().PutState("peerPara", peerAbeParaPutJSON)
+	err = ctx.GetStub().PutState("AbeParaMsp", mspJSON)
+	if err != nil {
+		return err
+	}
+	err = ctx.GetStub().PutState("AbeParaFame", abeJSON)
+	if err != nil {
+		return err
+	}
+
+	return nil
 
 	// return peerAbeParaPut
 
@@ -267,24 +272,19 @@ func (mc *MyChaincode) PrepareAbe(ctx contractapi.TransactionContextInterface, n
 
 }
 
-func getPeerAbePara(ctx contractapi.TransactionContextInterface, id string) (*AbePeerPara, error) {
-	var peerAbePara AbePeerPara
+func (mc *MyChaincode) GetPeerAbePara(ctx contractapi.TransactionContextInterface, id string) (string, error) {
 	peerAbeParaJson, err := ctx.GetStub().GetState(id)
+
 	if err != nil {
-		panic(err)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to read from world state: %v", err)
+		return "", fmt.Errorf("failed to read from world state: %v", err)
 	}
 	if peerAbeParaJson == nil {
-		return nil, fmt.Errorf("the asset %s does not exist", id)
+		return "", fmt.Errorf("the para %s does not exist", id)
 	}
 
-	err = json.Unmarshal(peerAbeParaJson, &peerAbePara)
-	if err != nil {
-		panic(err)
-	}
-	return &peerAbePara, nil
+	abeStr := string(peerAbeParaJson)
+
+	return abeStr, nil
 }
 
 //--------------------------------------------------------------------------------------------------------//
@@ -354,17 +354,29 @@ func encryptFile(filename string) error {
 	return nil
 }
 
-func aesKeyEncrypt(ctx contractapi.TransactionContextInterface, key *[32]byte) (string, error) {
-	peerAbePara, err := getPeerAbePara(ctx, "peerPara")
-	keyStr := string(key[:])
+func aesKeyEncrypt(ctx contractapi.TransactionContextInterface, key *[32]byte, ABEFAME []byte, MpkJson []byte, MspJson []byte) (string, error) {
+	var abeFame *abe.FAME
+	var Mpk *abe.FAMEPubKey
+	var Msp *abe.MSP
 
+	err := json.Unmarshal(ABEFAME, &abeFame)
 	if err != nil {
-		return "", err
+		panic(err)
 	}
-	sendData, _ := peerAbePara.ABEFAME.Encrypt(keyStr, peerAbePara.msp, peerAbePara.mpk)
-	sendDataJson, _ := json.Marshal(sendData)
-	sendDatastr := string(sendDataJson)
-	return sendDatastr, nil
+	err = json.Unmarshal(MpkJson, &Mpk)
+	if err != nil {
+		panic(err)
+	}
+	err = json.Unmarshal(MspJson, &Msp)
+	if err != nil {
+		panic(err)
+	}
+
+	CT, _ := abeFame.Encrypt(string(key[:]), Msp, Mpk)
+	CTJson, _ := json.Marshal(CT)
+	CTstr := string(CTJson)
+
+	return CTstr, nil
 
 }
 
@@ -492,31 +504,49 @@ func (mc *MyChaincode) PrepareFile(ctx contractapi.TransactionContextInterface, 
 }
 
 // UploadFile encrypts the file and upload to IPFS, and return the CID
-func (mc *MyChaincode) UploadFile(ctx contractapi.TransactionContextInterface, ip string) (*MessageKey, error) {
-	sh := shell.NewShell(ip)
-	err := encryptFolder("/tmp")
+func (mc *MyChaincode) UploadFile(ctx contractapi.TransactionContextInterface, idMKey string, ip string) error {
+	peerAbeParaMpk, err := ctx.GetStub().GetState("AbeParaMpk")
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to read from world state: %v", err)
 	}
-	// info, err := os.Stat("/tmp")
-	// if err != nil {
-	// 	return "", err
-	// }
+	if peerAbeParaMpk == nil {
+		return fmt.Errorf("AbeParaMpk does not exist")
+	}
+	peerAbeParaMsp, err := ctx.GetStub().GetState("AbeParaMsp")
+	if err != nil {
+		return fmt.Errorf("failed to read from world state: %v", err)
+	}
+	peerAbeParaFame, err := ctx.GetStub().GetState("AbeParaFame")
+	if err != nil {
+		return fmt.Errorf("failed to read from world state: %v", err)
+	}
+
+	sh := shell.NewShell(ip)
+	err = encryptFolder("/tmp")
+	if err != nil {
+		return err
+	}
 
 	cid, err := sh.AddDir("/tmp")
 	if err != nil {
-		return nil, err
+		return err
 	}
-	keyEn, err := aesKeyEncrypt(ctx, aesKey)
+	keyEn, err := aesKeyEncrypt(ctx, aesKey, peerAbeParaFame, peerAbeParaMpk, peerAbeParaMsp)
 	if err != nil {
-		return nil, err
-	}
-	MessageSend := MessageKey{
-		keys: keyEn,
-		cid:  cid,
+		return err
 	}
 
-	return &MessageSend, nil
+	MessageSend := MessageKey{
+		ID:  idMKey,
+		Key: keyEn,
+		Cid: cid,
+	}
+	peerMessageKeyJSON, err := json.Marshal(MessageSend)
+	if err != nil {
+		return err
+	}
+	err = ctx.GetStub().PutState(idMKey, peerMessageKeyJSON)
+	return err
 
 }
 
