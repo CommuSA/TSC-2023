@@ -34,6 +34,14 @@ type AbeUserPara struct {
 	keys    *abe.FAMEAttribKeys `json:"keys"`
 }
 
+type AbePeerPara struct {
+	ID      string `json:"ID"`
+	ABEFAME string `json:"ABEFAME"`
+	Mpk     string `json:"Mpk"`
+	Msk     string `json:"Msk"`
+	Msp     string `json:"Msp"`
+}
+
 // type AbePeerParaDB struct {
 // 	ID      string `json:"ID"`
 // 	ABEFAME string `json:"ABEFAME"`
@@ -200,9 +208,17 @@ func (mc *MyChaincode) ParaExists(ctx contractapi.TransactionContextInterface, i
 	return ParaJSON != nil, nil
 }
 
-func (mc *MyChaincode) PrepareAbe(ctx contractapi.TransactionContextInterface, numMagnitude int, AttributesNeeded int) error {
+func (mc *MyChaincode) PrepareAbe(ctx contractapi.TransactionContextInterface, numMagnitude int, AttributesNeeded int, id string) error {
+	exists, err := mc.ParaExists(ctx, id)
 	// txTimestamp, err := ctx.GetStub().GetTxTimestamp()
 	// seed := int64(txTimestamp.Seconds) + int64(txTimestamp.Nanos)
+
+	if err != nil {
+		return err
+	}
+	if exists {
+		return fmt.Errorf("the para %s already exists", id)
+	}
 	rand.Seed(time.Now().Unix())
 	relay := abe.NewFAME()
 	// Generate an ABE key pair
@@ -216,27 +232,21 @@ func (mc *MyChaincode) PrepareAbe(ctx contractapi.TransactionContextInterface, n
 	mpkJSON, _ := json.Marshal(mpk)
 	mspJSON, _ := json.Marshal(msp)
 	abeJSON, _ := json.Marshal(relay)
-
-	err = ctx.GetStub().PutState("AbeParaMsk", mskJSON)
-	if err != nil {
-		return err
-
-	}
-	err = ctx.GetStub().PutState("AbeParaMpk", mpkJSON)
-	if err != nil {
-		return err
+	peerAbeParaPut := AbePeerPara{
+		ID:      id,
+		ABEFAME: string(abeJSON),
+		Mpk:     string(mpkJSON),
+		Msk:     string(mskJSON),
+		Msp:     string(mspJSON),
 	}
 
-	err = ctx.GetStub().PutState("AbeParaMsp", mspJSON)
+	peerAbeParaPutJSON, err := json.Marshal(peerAbeParaPut)
 	if err != nil {
 		return err
 	}
-	err = ctx.GetStub().PutState("AbeParaFame", abeJSON)
-	if err != nil {
-		return err
-	}
+	err = ctx.GetStub().PutState(id, peerAbeParaPutJSON)
 
-	return nil
+	return err
 
 	// return peerAbeParaPut
 
@@ -354,20 +364,23 @@ func encryptFile(filename string) error {
 	return nil
 }
 
-func aesKeyEncrypt(ctx contractapi.TransactionContextInterface, key *[32]byte, ABEFAME []byte, MpkJson []byte, MspJson []byte) (string, error) {
+func aesKeyEncrypt(ctx contractapi.TransactionContextInterface, key *[32]byte, peerAbePara AbePeerPara) (string, error) {
+	ABEFAME := peerAbePara.ABEFAME
+	MpkStr := peerAbePara.Mpk
+	MspStr := peerAbePara.Msp
 	var abeFame *abe.FAME
 	var Mpk *abe.FAMEPubKey
 	var Msp *abe.MSP
 
-	err := json.Unmarshal(ABEFAME, &abeFame)
+	err := json.Unmarshal([]byte(ABEFAME), &abeFame)
 	if err != nil {
 		panic(err)
 	}
-	err = json.Unmarshal(MpkJson, &Mpk)
+	err = json.Unmarshal([]byte(MpkStr), &Mpk)
 	if err != nil {
 		panic(err)
 	}
-	err = json.Unmarshal(MspJson, &Msp)
+	err = json.Unmarshal([]byte(MspStr), &Msp)
 	if err != nil {
 		panic(err)
 	}
@@ -504,21 +517,20 @@ func (mc *MyChaincode) PrepareFile(ctx contractapi.TransactionContextInterface, 
 }
 
 // UploadFile encrypts the file and upload to IPFS, and return the CID
-func (mc *MyChaincode) UploadFile(ctx contractapi.TransactionContextInterface, idMKey string, ip string) error {
-	peerAbeParaMpk, err := ctx.GetStub().GetState("AbeParaMpk")
+func (mc *MyChaincode) UploadFile(ctx contractapi.TransactionContextInterface, idAbe string, idMKey string, ip string) error {
+	var peerAbePara AbePeerPara
+	peerAbeParaJson, err := ctx.GetStub().GetState(idAbe)
+
 	if err != nil {
 		return fmt.Errorf("failed to read from world state: %v", err)
 	}
-	if peerAbeParaMpk == nil {
-		return fmt.Errorf("AbeParaMpk does not exist")
+	if peerAbeParaJson == nil {
+		return fmt.Errorf("the para %s does not exist", idAbe)
 	}
-	peerAbeParaMsp, err := ctx.GetStub().GetState("AbeParaMsp")
+
+	err = json.Unmarshal(peerAbeParaJson, &peerAbePara)
 	if err != nil {
-		return fmt.Errorf("failed to read from world state: %v", err)
-	}
-	peerAbeParaFame, err := ctx.GetStub().GetState("AbeParaFame")
-	if err != nil {
-		return fmt.Errorf("failed to read from world state: %v", err)
+		panic(err)
 	}
 
 	sh := shell.NewShell(ip)
@@ -531,7 +543,7 @@ func (mc *MyChaincode) UploadFile(ctx contractapi.TransactionContextInterface, i
 	if err != nil {
 		return err
 	}
-	keyEn, err := aesKeyEncrypt(ctx, aesKey, peerAbeParaFame, peerAbeParaMpk, peerAbeParaMsp)
+	keyEn, err := aesKeyEncrypt(ctx, aesKey, peerAbePara)
 	if err != nil {
 		return err
 	}
