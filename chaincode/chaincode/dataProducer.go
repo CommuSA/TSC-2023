@@ -31,21 +31,12 @@ import (
 	"github.com/hyperledger/fabric-contract-api-go/contractapi"
 )
 
-const paraCollection = "assetCollection"
+const paraCollection = "publicCollection"
 const RequestInformationObjectType = "RequestInformation"
 
 // SmartContract of this fabric sample
 type SmartContract struct {
 	contractapi.Contract
-}
-
-// para describes main para details that are visible to all organizations
-type Asset struct {
-	Type  string `json:"objectType"` //Type is used to distinguish the various types of objects in state database
-	ID    string `json:"paraID"`
-	Color string `json:"color"`
-	Size  int    `json:"size"`
-	Owner string `json:"owner"`
 }
 
 // paraPrivateDetails describes details that are private to owners
@@ -1316,7 +1307,6 @@ func (s *SmartContract) PrepareFileTest(ctx contractapi.TransactionContextInterf
 			if err != nil && err != io.EOF {
 				return err
 			}
-	
 
 			fmt.Printf("Wrote %d bytes to %s\n", written, chunkFileName)
 		}

@@ -30,7 +30,6 @@ func (s *SmartContract) GetUploadKey(ctx contractapi.TransactionContextInterface
 		return nil, fmt.Errorf("failed to read para: %v", err)
 	}
 
-	// No Asset found, return empty response
 	if UploadKeyJson == nil {
 		return nil, fmt.Errorf("%v does not exist in collection %v", keyId, paraCollection)
 	}

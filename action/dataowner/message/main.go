@@ -209,9 +209,10 @@ func streamConsoleTo(ctx context.Context, topic *pubsub.Topic, key *[32]byte) {
 		if err != nil {
 			panic(err)
 		}
-		if s == "send msg kdd\n" {
+		if s == "send AES Key\n" {
 			sendKey(ctx, topic, key)
-			// streamSend(ctx, topic, key)
+		} else if s == "send msg kdd\n" {
+			streamSend(ctx, topic, key)
 		} else {
 			// sendData, _ := peerAbePara.abefame.Encrypt(s, peerAbePara.msp, peerAbePara.mpk)
 			// sendDataJson, _ := json.Marshal(sendData)
