@@ -1316,6 +1316,7 @@ func (s *SmartContract) PrepareFileTest(ctx contractapi.TransactionContextInterf
 			if err != nil && err != io.EOF {
 				return err
 			}
+	
 
 			fmt.Printf("Wrote %d bytes to %s\n", written, chunkFileName)
 		}

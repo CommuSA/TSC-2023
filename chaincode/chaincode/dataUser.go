@@ -65,11 +65,12 @@ func (s *SmartContract) GetUserAbePara(ctx contractapi.TransactionContextInterfa
 func (s *SmartContract) GetFileFromIPFS(ctx contractapi.TransactionContextInterface, collection string, UserKey string, ip string, messageId string) (string, error) {
 	sh := shell.NewShell(ip)
 	clearFolder("/tmp/")
-	log.Printf("--------clearFolder--------clearFolder--------clearFolder--------clearFolder ")
 
 	Download_start := time.Now()
 
+	AesDecryptStart := time.Now()
 	messageFile, err := s.AesKeyDecrypt(ctx, collection, UserKey, messageId)
+	AesDecryptTimeout := time.Since(AesDecryptStart)
 	if err != nil {
 		return "", fmt.Errorf("error aesKeyDecrypt aeskey: %v", err)
 	}
@@ -78,7 +79,7 @@ func (s *SmartContract) GetFileFromIPFS(ctx contractapi.TransactionContextInterf
 	aesKeyBytes := []byte(messageFile.aesKey)
 	var aesKey [32]byte
 	copy(aesKey[:], aesKeyBytes)
-	log.Printf("--------aeskey--------aeskey--------aeskey--------abeFame: %+v ", aesKey)
+	// log.Printf("--------aeskey--------aeskey--------aeskey--------abeFame: %+v ", aesKey)
 
 	tempDir, err := ioutil.TempDir("/tmp", "ipfs_download")
 	if err != nil {
@@ -111,11 +112,12 @@ func (s *SmartContract) GetFileFromIPFS(ctx contractapi.TransactionContextInterf
 	}
 
 	// Decrypt the files
-
+	decryptFileStart := time.Now()
 	err = decryptFolder(tempDir, &aesKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt files: %v", err)
 	}
+	decryptFileTime := time.Since(decryptFileStart)
 
 	// Move the files to /tmp directory
 	err = os.Rename(tempDir, "/tmp/"+messageFile.Cid)
@@ -123,8 +125,9 @@ func (s *SmartContract) GetFileFromIPFS(ctx contractapi.TransactionContextInterf
 		return "", fmt.Errorf("failed to move files to /tmp directory: %v", err)
 	}
 	Download_Time := time.Since(Download_start)
+	result := []byte(fmt.Sprintf(`%s    %s   %s`, Download_Time.String(), AesDecryptTimeout.String(), decryptFileTime.String()))
 
-	return Download_Time.String(), nil
+	return string(result), nil
 }
 
 // ReadApplyValue reads the para private details in organization specific collection
@@ -301,11 +304,6 @@ func (s *SmartContract) AesKeyDecrypt(ctx contractapi.TransactionContextInterfac
 	if err != nil {
 		panic(err)
 	}
-
-	log.Printf("--------aeskey--------aeskey--------aeskey--------aesKeyEncrypt: %+v", aesKeyEncrypt)
-	log.Printf("--------aeskey--------aeskey--------aeskey--------memKeys: %+v ", memKeys)
-	log.Printf("--------aeskey--------aeskey--------aeskey--------Mpk: %+v ", Mpk)
-	log.Printf("--------aeskey--------aeskey--------aeskey--------abeFame: %+v ", abeFame)
 
 	aesKeyStr, err := abeFame.Decrypt(aesKeyEncrypt, memKeys, Mpk)
 	if err != nil {
