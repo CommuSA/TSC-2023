@@ -5,7 +5,7 @@ if [ $# != 1 ] ; then
 fi
 # ./network.sh up createChannel -ca -s couchdb
 
-./network.sh deployCC -ccn private -ccp ../asset-transfer-private-data/chaincode-go/ -ccl go -ccv $1 -ccs $1 -ccep "OR('Org1MSP.peer','Org2MSP.peer')" -cccg ../asset-transfer-private-data/chaincode-go/collections_config.json
+./network.sh deployCC -ccn private -ccp $HOME/go/src/github.com/TSC-2023/chaincode -ccl go -ccep "OR('Org1MSP.peer','Org2MSP.peer')" -cccg $HOME/go/src/github.com/TSC-2023/chaincode/collections_config.json
 
 export PATH=${PWD}/../bin:${PWD}:$PATH
 export FABRIC_CFG_PATH=$PWD/../config/
