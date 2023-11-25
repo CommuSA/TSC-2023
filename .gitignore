@@ -1,6 +1,6 @@
 .DS_Store
 .vscode
-test/*
+# test/*
 ABEgot/*
-msg/*
+msg/kddcup*
 Docker/ipfs-*
